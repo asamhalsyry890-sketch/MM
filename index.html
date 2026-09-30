@@ -545,14 +545,41 @@ async function analyzeMatch(){
 }
 
 function searchUrlForBoard(board, title, keywords, location){
-  const query = [title, keywords, location].filter(Boolean).join(' ');
+  const searchTerms = [title, keywords].filter(Boolean).join(' ').trim();
   if (board === 'linkedin') {
-    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent([title, keywords].filter(Boolean).join(' '))}&location=${encodeURIComponent(location)}`;
+    return 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent(searchTerms) + '&location=' + encodeURIComponent(location);
   }
-  const site = board === 'bayt' ? 'bayt.com' : 'gulftalent.com';
-  return `https://www.google.com/search?q=${encodeURIComponent(`site:${site} ${query} jobs`)}`;
+  const baytPaths = {
+    'Saudi Arabia': 'en/saudi-arabia/jobs/',
+    'United Arab Emirates': 'en/uae/jobs/',
+    'Qatar': 'en/qatar/jobs/',
+    'Kuwait': 'en/kuwait/jobs/',
+    'Bahrain': 'en/bahrain/jobs/',
+    'Oman': 'en/oman/jobs/',
+    'Remote': 'en/international/jobs/'
+  };
+  if (board === 'bayt') {
+    const path = baytPaths[location] || baytPaths['Saudi Arabia'];
+    const terms = location === 'Remote' ? 'remote ' + searchTerms : searchTerms;
+    const slug = encodeURIComponent(terms.trim().replace(/\s+/g, '-'));
+    return 'https://www.bayt.com/' + path + (slug ? slug + '-jobs/' : '');
+  }
+  const gulfCountryIds = {
+    'Saudi Arabia': '10111112000000',
+    'United Arab Emirates': '10111111000000',
+    'Qatar': '10111114000000',
+    'Kuwait': '10111113000000',
+    'Bahrain': '10111115000000',
+    'Oman': '10111116000000',
+    'Remote': '1'
+  };
+  const params = new URLSearchParams({
+    category: '', city: '', country: gulfCountryIds[location] || gulfCountryIds['Saudi Arabia'],
+    employment_type: '', has_external_application: '', industry: '',
+    search_keyword: searchTerms, seniority: ''
+  });
+  return 'https://www.gulftalent.com/jobs/search?' + params.toString();
 }
-
 async function findMatchingJobs(){
   const lang = getLang();
   const cv = (lang === 'en' ? document.getElementById('cv-input-en') : document.getElementById('cv-input')).value.trim();
