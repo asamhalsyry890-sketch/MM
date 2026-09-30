@@ -142,6 +142,20 @@
   .result-col h4{ font-size:0.9rem; margin-bottom:8px; color:var(--text); }
   .result-col ul{ list-style:none; display:flex; flex-direction:column; gap:6px; }
   .result-col li{ font-size:0.88rem; color:var(--text-muted); }
+  .job-search-controls{ display:flex; flex-direction:column; gap:12px; margin-top:8px; padding-top:18px; border-top:1px solid var(--border); }
+  .job-search-controls select{ width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:12px 14px; font:inherit; }
+  .privacy-consent{ display:flex; align-items:flex-start; gap:9px; color:var(--text-muted); font-size:0.8rem; line-height:1.5; }
+  .privacy-consent input{ margin-top:5px; accent-color:var(--accent); flex-shrink:0; }
+  .jobs-results{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:14px; }
+  .jobs-results[hidden]{ display:none; }
+  .jobs-heading{ font-size:1.05rem; }
+  .jobs-note{ color:var(--text-muted); font-size:0.82rem; }
+  .job-role-card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .job-role-card h4{ margin-bottom:5px; }
+  .job-role-card p{ color:var(--text-muted); font-size:0.86rem; margin-bottom:12px; }
+  .job-search-links{ display:flex; flex-wrap:wrap; gap:8px; }
+  .job-search-links a{ color:var(--text); text-decoration:none; border:1px solid var(--border); border-radius:8px; padding:7px 11px; font-size:0.82rem; }
+  .job-search-links a:hover{ border-color:var(--accent); color:var(--accent); }
 
   .cta-section{ background:var(--surface2); border-radius:20px; padding:60px 44px; text-align:center; margin:0 28px; }
   .cta-section h2{ font-size:1.9rem; margin-bottom:14px; font-weight:900; }
@@ -386,12 +400,35 @@
           <span data-lang-inline="ar">حلّل الآن</span>
           <span data-lang-inline="en">Analyze now</span>
         </button>
+        <div class="job-search-controls">
+          <label for="job-location" data-lang="ar">الدولة أو المنطقة للبحث</label>
+          <label for="job-location" data-lang="en">Country or region</label>
+          <select id="job-location" aria-label="Job search location">
+            <option value="Saudi Arabia">السعودية · Saudi Arabia</option>
+            <option value="United Arab Emirates">الإمارات · United Arab Emirates</option>
+            <option value="Qatar">قطر · Qatar</option>
+            <option value="Kuwait">الكويت · Kuwait</option>
+            <option value="Bahrain">البحرين · Bahrain</option>
+            <option value="Oman">عُمان · Oman</option>
+            <option value="Remote">عن بُعد · Remote</option>
+          </select>
+          <label class="privacy-consent">
+            <input id="jobs-consent" type="checkbox">
+            <span data-lang-inline="ar">أوافق على إرسال نص السيرة إلى خدمة الذكاء الاصطناعي لاستخراج مسميات وكلمات بحث وظيفية. لا تُرسل معلومات لا تريد مشاركتها.</span>
+            <span data-lang-inline="en">I agree to send my résumé text to the AI service to suggest job titles and search terms. Do not include information you do not want to share.</span>
+          </label>
+          <button id="find-jobs-btn" class="btn-ghost" type="button" onclick="findMatchingJobs()">
+            <span data-lang-inline="ar">اعثر على وظائف مناسبة لسيرتي</span>
+            <span data-lang-inline="en">Find jobs that fit my résumé</span>
+          </button>
+        </div>
       </div>
       <div class="demo-results" id="demo-results">
         <p class="demo-placeholder" data-lang="ar">النتائج بتظهر هنا بعد التحليل.</p>
         <p class="demo-placeholder" data-lang="en">Your results will appear here after analysis.</p>
       </div>
     </div>
+    <div class="jobs-results" id="jobs-results" aria-live="polite" hidden></div>
   </section>
 </div>
 
@@ -521,6 +558,69 @@ async function analyzeMatch(){
   } catch(err){
     resultsEl.innerHTML = `<p class="demo-error">${lang==='ar' ? 'صار خطأ أثناء التحليل، حاول مرة أخرى بعد قليل.' : 'Something went wrong, please try again shortly.'}</p>`;
     console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function searchUrlForBoard(board, title, keywords, location){
+  const query = [title, keywords, location].filter(Boolean).join(' ');
+  if (board === 'linkedin') {
+    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent([title, keywords].filter(Boolean).join(' '))}&location=${encodeURIComponent(location)}`;
+  }
+  const site = board === 'bayt' ? 'bayt.com' : 'gulftalent.com';
+  return `https://www.google.com/search?q=${encodeURIComponent(`site:${site} ${query} jobs`)}`;
+}
+
+async function findMatchingJobs(){
+  const lang = getLang();
+  const cv = (lang === 'en' ? document.getElementById('cv-input-en') : document.getElementById('cv-input')).value.trim();
+  const resultsEl = document.getElementById('jobs-results');
+  const btn = document.getElementById('find-jobs-btn');
+  const consent = document.getElementById('jobs-consent').checked;
+  const location = document.getElementById('job-location').value;
+
+  resultsEl.hidden = false;
+  if (!cv) {
+    resultsEl.innerHTML = `<p class="demo-error">${lang === 'ar' ? 'أضف نص سيرتك أو ارفع ملف PDF أولاً.' : 'Add your résumé text or upload a PDF first.'}</p>`;
+    return;
+  }
+  if (!consent) {
+    resultsEl.innerHTML = `<p class="demo-error">${lang === 'ar' ? 'وافق على معالجة نص السيرة قبل البحث عن الوظائف.' : 'Please agree to résumé processing before searching for jobs.'}</p>`;
+    return;
+  }
+
+  resultsEl.innerHTML = `<p class="demo-loading">${lang === 'ar' ? 'نستخرج المسميات والمهارات المناسبة...' : 'Finding suitable job titles and skills...'}</p>`;
+  btn.disabled = true;
+  try {
+    const response = await fetch('/.netlify/functions/suggest-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cvText: cv, location, language: lang })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Job search suggestions failed');
+
+    const roles = Array.isArray(data.roles) ? data.roles.slice(0, 4) : [];
+    if (!roles.length) throw new Error('No roles returned');
+    const boards = [
+      { id: 'linkedin', label: lang === 'ar' ? 'LinkedIn' : 'LinkedIn' },
+      { id: 'bayt', label: lang === 'ar' ? 'بيت.كوم' : 'Bayt' },
+      { id: 'gulftalent', label: 'GulfTalent' }
+    ];
+    let html = `<h3 class="jobs-heading">${lang === 'ar' ? 'مسميات وظيفية مقترحة لك' : 'Suggested job titles for you'}</h3>`;
+    html += `<p class="jobs-note">${lang === 'ar' ? 'هذه روابط بحث مباشرة تعرض الوظائف الحالية في مواقع التوظيف. راجع كل إعلان وقدّم بنفسك.' : 'These links open current search results on job sites. Review each listing and apply yourself.'}</p>`;
+    html += roles.map((role) => {
+      const title = String(role.title || '').slice(0, 120);
+      const keywords = String(role.keywords || '').slice(0, 180);
+      const reason = String(role.reason || '').slice(0, 240);
+      const links = boards.map(board => `<a href="${searchUrlForBoard(board.id, title, keywords, location)}" target="_blank" rel="noopener noreferrer">${board.label} ↗</a>`).join('');
+      return `<article class="job-role-card"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(reason)}</p><div class="job-search-links">${links}</div></article>`;
+    }).join('');
+    resultsEl.innerHTML = html;
+  } catch (err) {
+    console.error(err);
+    resultsEl.innerHTML = `<p class="demo-error">${lang === 'ar' ? 'تعذر العثور على اقتراحات الآن. حاول مرة أخرى بعد قليل.' : 'Could not find suggestions right now. Please try again shortly.'}</p>`;
   } finally {
     btn.disabled = false;
   }
